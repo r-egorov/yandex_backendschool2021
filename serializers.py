@@ -14,9 +14,9 @@ class Courier:
 
     @property
     def lift_capacity(self):
-        if self.courier_type == "foot":
+        if self.type == "foot":
             return 10
-        elif self.courier_type == "bike":
+        elif self.type == "bike":
             return 15
         else:
             return 50
@@ -30,12 +30,12 @@ class CourierSerializer:
     def __init__(self, data):
         self.couriers = []
         self.invalid = []
-        self.to_internal_value(data)
+        self.data = data
 
-    def to_internal_value(self, data):
-        for element in data:
+    def to_internal_value(self):
+        for element in self.data:
             courier_id = element.get("courier_id")
-            courier_type = element.get("courier_type")
+            courier_type = self.validate_type(element.get("courier_type"))
             regions = self.validate_regions(element.get("regions"))
             working_hours = self.validate_hours(element.get("working_hours"))
             if not courier_id or \
@@ -57,6 +57,14 @@ class CourierSerializer:
         return working_hours
 
     @staticmethod
+    def validate_type(courier_type):
+        if courier_type is None:
+            return None
+        if courier_type in ("foot", "bike", "auto"):
+            return courier_type
+        return courier_type
+
+    @staticmethod
     def validate_regions(regions):
         if regions is None:
             return None
@@ -76,27 +84,27 @@ class CourierSerializer:
         return couriers_dict
 
     def is_valid(self):
-        if self.invalid:
-            return False
+        self.to_internal_value()
         existing_couriers = db.get_courier_ids()
-        i = len(self.couriers) - 1
-        while i >= 0:
+        i = 0
+        while i < len(self.couriers):
             courier = self.couriers[i]
             if courier.id in existing_couriers:
                 self.couriers.remove(courier)
-            i -= 1
+                i -= 1
+                self.invalid.append(courier.id)
+            i += 1
+        if self.invalid:
+            return False
         return True
 
     def save(self):
-        columns = {
-            "id": 0,
-            "type": 0,
-            "regions": 0,
-            "working_hours": 0,
-        }
+        to_save = [("id", "type", "regions", "working_hours")]
         for courier in self.couriers:
-            columns["id"] = courier.id
-            columns["type"] = courier.type
-            columns["regions"] = json.dumps(courier.regions)
-            columns["working_hours"] = json.dumps(courier.working_hours)
-            db.insert("couriers", columns)
+            to_save.append((
+                courier.id,
+                courier.type,
+                json.dumps(courier.regions),
+                json.dumps(courier.working_hours),
+            ))
+        db.insert_many("couriers", to_save)

@@ -32,10 +32,10 @@ def get_cursor():
     return cursor
 
 
-def insert(table: str, column_values):
+def insert_one(table: str, column_values):
     """
     Inserts given values in the given table.
-    The values have to given as a dictionary, where keys are the columns where
+    The values have to be given as a dictionary, where keys are the columns where
     the values have to be put.
     Parameters:
         table: str - the destination table name
@@ -44,6 +44,28 @@ def insert(table: str, column_values):
     columns = ", ".join(column_values.keys())
     values = [tuple(column_values.values())]
     placeholders = ", ".join("?" * len(column_values.keys()))
+    cursor.executemany(
+        f"INSERT INTO {table} "
+        f"({columns}) "
+        f"VALUES ({placeholders})",
+        values)
+    conn.commit()
+
+
+def insert_many(table: str, column_values):
+    """
+    Inserts a list of given values in the given table.
+    The values have to be given as a list of tuples, where list[0] is
+    a tuple of columns where values have to be put.
+    Parameters:
+        table: str - the destination table name
+        column_values: List - the list element[0] of which is a tuple of
+        columns, other elements are values which are to put
+    """
+    columns = ", ".join(column_values[0])
+    values = [value for value in column_values[1:]]
+    placeholders = ", ".join("?" * len(column_values[0]))
+    print(values)
     cursor.executemany(
         f"INSERT INTO {table} "
         f"({columns}) "
