@@ -13,3 +13,11 @@ CREATE TABLE IF NOT EXISTS orders(
     region INTEGER NOT NULL,
     delivery_hours TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS orders_assigned(
+    order_id INTEGER PRIMARY KEY,
+    courier_id INTEGER NOT NULL,
+    assign_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders (id),
+    FOREIGN KEY (courier_id) REFERENCES couriers (id)
+);

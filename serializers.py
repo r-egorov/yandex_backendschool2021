@@ -7,10 +7,12 @@ from abc import ABC, abstractmethod
 
 class Courier:
     def __init__(self, data):
-        self.id = data["courier_id"]
-        self.type = data["courier_type"]
-        self.regions = data["regions"]
-        self.working_hours = data["working_hours"]
+        self.id = data.get("courier_id")
+        if self.id is None:
+            self.id = data.get("id")
+        self.type = data.get("courier_type")
+        self.regions = data.get("regions")
+        self.working_hours = data.get("working_hours")
         self.rating = 0.0
         self.earning = 0
 
@@ -26,10 +28,12 @@ class Courier:
 
 class Order:
     def __init__(self, data):
-        self.id = data["order_id"]
-        self.weight = data["weight"]
-        self.region = data["region"]
-        self.delivery_hours = data["delivery_hours"]
+        self.id = data.get("order_id")
+        if self.id is None:
+            self.id = data.get("id")
+        self.weight = data.get("weight")
+        self.region = data.get("region")
+        self.delivery_hours = data.get("delivery_hours")
 
 
 class AbstractSerializer(ABC):
@@ -145,8 +149,12 @@ class CourierSerializer(AbstractSerializer):
         for key in list(self.data):
             if key == "regions":
                 self.data[key] = self.validate_regions(self.data[key])
+                if self.data[key] is not None:
+                    self.data["regions"] = json.dumps(self.data["regions"])
             elif key == "working_hours":
                 self.data[key] = self.validate_hours(self.data[key])
+                if self.data[key] is not None:
+                    self.data["working_hours"] = json.dumps(self.data["working_hours"])
             elif key == "courier_type":
                 self.data["type"] = self.validate_type(self.data.pop(key))
                 key = "type"
@@ -156,8 +164,6 @@ class CourierSerializer(AbstractSerializer):
             if not self.data[key]:
                 self.invalid.append(courier_id)
                 return
-        self.data["regions"] = json.dumps(self.data["regions"])
-        self.data["working_hours"] = json.dumps(self.data["working_hours"])
         db.update("couriers", courier_id, self.data)
 
     def patch_response(self, courier_id):
@@ -183,6 +189,17 @@ class CourierSerializer(AbstractSerializer):
             ))
         db.insert_many("couriers", to_save)
 
+    @staticmethod
+    def get_courier(courier_id):
+        courier_row = db.get_id("couriers", courier_id)
+        data = {
+            "courier_id": courier_row[0],
+            "courier_type": courier_row[1],
+            "regions": json.loads(courier_row[2]),
+            "working_hours": json.loads(courier_row[3])
+        }
+        return Courier(data)
+
 
 class OrderSerializer(AbstractSerializer):
     def __init__(self, data, many=False):
@@ -196,6 +213,8 @@ class OrderSerializer(AbstractSerializer):
 
     def make_order(self, data):
         order_id = data.get("order_id")
+        if order_id is None:
+            order_id = data.get("id")
         weight = self.validate_weight(data.get("weight"))
         region = data.get("region")
         delivery_hours = self.validate_hours(data.get("delivery_hours"))
@@ -229,6 +248,14 @@ class OrderSerializer(AbstractSerializer):
         for order in self.valid:
             orders_dict["orders"].append({"id": order.id})
         return orders_dict
+
+    def get_orders(self):
+        self.data = db.get_all(
+            "orders", ["id", "weight", "region", "delivery_hours"]
+        )
+        for order in self.data:
+            order["delivery_hours"] = json.loads(order["delivery_hours"])
+        self.to_internal_value()
 
     def save(self):
         to_save = [("id", "weight", "region", "delivery_hours")]

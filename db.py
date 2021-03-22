@@ -10,7 +10,7 @@ def _init_db():
     """Initializes the database"""
     with open(os.path.join("db", "create_db.sql"), "r", encoding="utf-8") as f:
         sql = f.read()
-    cursor.execute(sql)
+    cursor.executescript(sql)
     conn.commit()
 
 
@@ -123,7 +123,7 @@ def get_id(table: str, row_id: int):
         A tuple of row values
     """
     cursor.execute(f"SELECT * FROM {table} WHERE id={row_id}")
-    row = cursor.fetchall()
+    row = cursor.fetchone()
     return row
 
 
