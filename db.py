@@ -65,7 +65,6 @@ def insert_many(table: str, column_values):
     columns = ", ".join(column_values[0])
     values = [value for value in column_values[1:]]
     placeholders = ", ".join("?" * len(column_values[0]))
-    print(values)
     cursor.executemany(
         f"INSERT INTO {table} "
         f"({columns}) "
@@ -121,25 +120,27 @@ def get_id(table: str, row_id: int):
         table: str - the destination table name
         row_id: int - the columns that are needed to be fetched
     Returns:
-        A list of column:value dictionaries
+        A tuple of row values
     """
     cursor.execute(f"SELECT * FROM {table} WHERE id={row_id}")
     row = cursor.fetchall()
     return row
 
 
-def get_courier_ids():
+def get_ids(table: str):
     """
     Fetches every id of the existing courier.
     Returns:
         A list of ids
     """
-    cursor.execute(f"SELECT id FROM couriers")
+    cursor.execute(f"SELECT id FROM {table}")
     rows = cursor.fetchall()
     result = []
     for row in rows:
         result.append(row[0])
     return result
+
+
 
 
 def delete(table: str, row_id: int):

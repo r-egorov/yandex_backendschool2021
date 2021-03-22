@@ -2,6 +2,8 @@ import json
 import db
 import re
 
+from abc import ABC, abstractmethod
+
 
 class Courier:
     def __init__(self, data):
@@ -22,43 +24,90 @@ class Courier:
             return 50
 
 
-class CourierSerializer:
-    """
-    A class used to serialize data received in JSON-format
-    """
-
+class Order:
     def __init__(self, data):
-        self.couriers = []
-        self.invalid = []
-        self.data = data
+        self.id = data["order_id"]
+        self.weight = data["weight"]
+        self.region = data["region"]
+        self.delivery_hours = data["delivery_hours"]
 
-    def to_internal_value(self):
-        for element in self.data:
-            courier_id = element.get("courier_id")
-            courier_type = self.validate_type(element.get("courier_type"))
-            regions = self.validate_regions(element.get("regions"))
-            working_hours = self.validate_hours(element.get("working_hours"))
-            if not courier_id or \
-                    not courier_type or \
-                    not regions or \
-                    not working_hours:
-                self.invalid.append(courier_id)
-            else:
-                courier = Courier(element)
-                self.couriers.append(courier)
+
+class AbstractSerializer(ABC):
+    def __init__(self, data, many=False):
+        self.data = data
+        self.many = many
+        self.valid = []
+        self.invalid = []
+
+    def no_duplicates(self, existing_elements):
+        i = 0
+        while i < len(self.valid):
+            order = self.valid[i]
+            if order.id in existing_elements:
+                self.valid.remove(order)
+                i -= 1
+                self.invalid.append(order.id)
+            i += 1
+        if self.invalid:
+            return False
+        return True
 
     @staticmethod
     def validate_hours(working_hours):
-        if working_hours is None:
+        if not working_hours:
             return None
         for period in working_hours:
             if not re.match(r"^\d{2}:\d{2}-\d{2}:\d{2}$", period):
                 return None
         return working_hours
 
+    @abstractmethod
+    def is_valid(self):
+        self.to_internal_value()
+        pass
+
+    @abstractmethod
+    def to_internal_value(self):
+        pass
+
+    @abstractmethod
+    def import_response(self):
+        pass
+
+    @abstractmethod
+    def save(self):
+        pass
+
+
+class CourierSerializer(AbstractSerializer):
+    """
+    A class used to serialize data received in JSON-format
+    """
+
+    def make_courier(self, data):
+        courier_id = data.get("courier_id")
+        courier_type = self.validate_type(data.get("courier_type"))
+        regions = self.validate_regions(data.get("regions"))
+        working_hours = self.validate_hours(data.get("working_hours"))
+        if not courier_id or \
+                not courier_type or \
+                not regions or \
+                not working_hours:
+            self.invalid.append(courier_id)
+        else:
+            courier = Courier(data)
+            self.valid.append(courier)
+
+    def to_internal_value(self):
+        if self.many:
+            for element in self.data:
+                self.make_courier(element)
+        else:
+            self.make_courier(self.data)
+
     @staticmethod
     def validate_type(courier_type):
-        if courier_type is None:
+        if not courier_type:
             return None
         if courier_type in ("foot", "bike", "auto"):
             return courier_type
@@ -66,41 +115,66 @@ class CourierSerializer:
 
     @staticmethod
     def validate_regions(regions):
-        if regions is None:
+        if not regions:
             return None
         for region in regions:
             if not isinstance(region, int):
                 return None
         return regions
 
-    def response(self):
+    def import_response(self):
         couriers_dict = {"couriers": []}
         if self.invalid:
             for courier_id in self.invalid:
                 couriers_dict["couriers"].append({"id": courier_id})
             return {"validation_error": couriers_dict}
-        for courier in self.couriers:
+        for courier in self.valid:
             couriers_dict["couriers"].append({"id": courier.id})
         return couriers_dict
 
     def is_valid(self):
         self.to_internal_value()
-        existing_couriers = db.get_courier_ids()
-        i = 0
-        while i < len(self.couriers):
-            courier = self.couriers[i]
-            if courier.id in existing_couriers:
-                self.couriers.remove(courier)
-                i -= 1
-                self.invalid.append(courier.id)
-            i += 1
+        existing_couriers = db.get_ids("couriers")
+        return self.no_duplicates(existing_couriers)
+
+    def patch_courier(self, courier_id):
+        existing_couriers = db.get_ids("couriers")
+        if courier_id not in existing_couriers:
+            self.invalid.append(courier_id)
+            return
+        for key in list(self.data):
+            if key == "regions":
+                self.data[key] = self.validate_regions(self.data[key])
+            elif key == "working_hours":
+                self.data[key] = self.validate_hours(self.data[key])
+            elif key == "courier_type":
+                self.data["type"] = self.validate_type(self.data.pop(key))
+                key = "type"
+            else:
+                self.invalid.append(courier_id)
+                break
+            if not self.data[key]:
+                self.invalid.append(courier_id)
+                return
+        self.data["regions"] = json.dumps(self.data["regions"])
+        self.data["working_hours"] = json.dumps(self.data["working_hours"])
+        db.update("couriers", courier_id, self.data)
+
+    def patch_response(self, courier_id):
         if self.invalid:
-            return False
-        return True
+            return {"patch_error": {"couriers": [{"id": courier_id}]}}
+        courier_row = db.get_id("couriers", courier_id)[0]
+        response = {
+            "courier_id": courier_row[0],
+            "courier_type": courier_row[1],
+            "regions": json.loads(courier_row[2]),
+            "working_hours": json.loads(courier_row[3])
+        }
+        return response
 
     def save(self):
         to_save = [("id", "type", "regions", "working_hours")]
-        for courier in self.couriers:
+        for courier in self.valid:
             to_save.append((
                 courier.id,
                 courier.type,
@@ -108,3 +182,61 @@ class CourierSerializer:
                 json.dumps(courier.working_hours),
             ))
         db.insert_many("couriers", to_save)
+
+
+class OrderSerializer(AbstractSerializer):
+    def __init__(self, data, many=False):
+        super().__init__(data, many)
+
+    @staticmethod
+    def validate_weight(weight):
+        if not weight or weight < 0.01 or weight > 50:
+            return None
+        return weight
+
+    def make_order(self, data):
+        order_id = data.get("order_id")
+        weight = self.validate_weight(data.get("weight"))
+        region = data.get("region")
+        delivery_hours = self.validate_hours(data.get("delivery_hours"))
+        if not order_id or \
+                not weight or \
+                not region or \
+                not delivery_hours:
+            self.invalid.append(order_id)
+        else:
+            order = Order(data)
+            self.valid.append(order)
+
+    def to_internal_value(self):
+        if self.many:
+            for element in self.data:
+                self.make_order(element)
+        else:
+            self.make_order(self.data)
+
+    def is_valid(self):
+        self.to_internal_value()
+        existing_orders = db.get_ids("orders")
+        return self.no_duplicates(existing_orders)
+
+    def import_response(self):
+        orders_dict = {"orders": []}
+        if self.invalid:
+            for order_id in self.invalid:
+                orders_dict["orders"].append({"id": order_id})
+            return {"validation_error": orders_dict}
+        for order in self.valid:
+            orders_dict["orders"].append({"id": order.id})
+        return orders_dict
+
+    def save(self):
+        to_save = [("id", "weight", "region", "delivery_hours")]
+        for order in self.valid:
+            to_save.append((
+                order.id,
+                order.weight,
+                order.region,
+                json.dumps(order.delivery_hours),
+            ))
+        db.insert_many("orders", to_save)
