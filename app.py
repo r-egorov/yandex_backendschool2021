@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
-from serializers import CourierSerializer, OrderSerializer
-from datetime import time
-import re
+from serializers import CourierSerializer,\
+    OrderSerializer, TimePeriod, OrderAssigner
+
 
 app = Flask(__name__)
 
@@ -46,29 +46,36 @@ def import_orders():
     return jsonify(serializer.import_response()), 400
 
 
-def create_time(hours_list):
-    time_list = []
-    for timestr in hours_list:
-        time_search = re.search("^(\d{2}:\d{2})-(\d{2}:\d{2})$", timestr)
-        start = time_search.group(1)
-        end = time_search.group(2)
-        time_list.append((start, end))
-    print(time_list)
-
-
 @app.route("/orders/assign", methods=["POST"])
 def assign_orders():
     content = request.get_json()
     order_serializer = OrderSerializer(content, many=True)
-    order_serializer.get_orders()
-
+    order_serializer.get_free_orders()
     courier = CourierSerializer.get_courier(content["courier_id"])
-    working_hours = time.fromisoformat("09:00")
-    for order in order_serializer.valid:
-        print("DH", order.delivery_hours)
-        create_time(order.delivery_hours)
+    if courier is None:
+        response = {"error": "No courier with such id"}
+        return jsonify(response), 400
 
-    return "GOOD", 200
+    working_hours = [TimePeriod(timestr) for timestr in courier.working_hours]
+    courier.working_hours = working_hours
+
+    orders_to_assign = []
+    for order in order_serializer.valid:
+        if order.weight <= courier.lift_capacity:
+            if order.region in courier.regions:
+                delivery_time_list = [
+                    TimePeriod(timestr) for timestr in order.delivery_hours
+                ]
+                order.delivery_hours = delivery_time_list
+                for delivery_period in order.delivery_hours:
+                    if delivery_period in courier.working_hours:
+                        orders_to_assign.append(order)
+                        break
+
+    assigner = OrderAssigner(courier, orders_to_assign)
+    assigner.assign_orders()
+    response = assigner.response()
+    return jsonify(response), 200
 
 
 if __name__ == "__main__":

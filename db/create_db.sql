@@ -11,7 +11,9 @@ CREATE TABLE IF NOT EXISTS orders(
     id INTEGER PRIMARY KEY,
     weight FLOAT NOT NULL,
     region INTEGER NOT NULL,
-    delivery_hours TEXT NOT NULL
+    delivery_hours TEXT NOT NULL,
+    assigned INTEGER DEFAULT 0,
+    completed INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS orders_assigned(

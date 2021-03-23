@@ -3,6 +3,7 @@ import db
 import re
 
 from abc import ABC, abstractmethod
+from datetime import time, datetime
 
 
 class Courier:
@@ -34,6 +35,41 @@ class Order:
         self.weight = data.get("weight")
         self.region = data.get("region")
         self.delivery_hours = data.get("delivery_hours")
+        self.assigned = data.get("assigned")
+        self.completed = data.get("completed")
+
+
+class TimePeriod:
+    def __init__(self, timestr):
+        time_search = re.search(r"^(\d{2}:\d{2})-(\d{2}:\d{2})$", timestr)
+        self.start = time.fromisoformat(time_search.group(1))
+        self.end = time.fromisoformat(time_search.group(2))
+
+    def __repr__(self):
+        return str(self.start) + " - " + str(self.end)
+
+    def __eq__(self, other):
+        return self.start < other.end and self.end > other.start
+
+
+class OrderAssigner:
+    def __init__(self, courier, orders_to_assign):
+        self.courier = courier
+        self.to_assign = orders_to_assign
+        self.timestamp = datetime.now()
+
+    def assign_orders(self):
+        timestamp = datetime.strftime(self.timestamp, "%Y-%m-%d %H:%M:%S")
+        db.assign_orders(self.courier.id, self.to_assign, timestamp)
+
+    def response(self):
+        timestamp = self.timestamp.isoformat()[:-4] + "Z"
+        print(timestamp)
+        response = {
+            "orders": [{"id": order.id} for order in self.to_assign],
+            "assign_time": timestamp
+        }
+        return response
 
 
 class AbstractSerializer(ABC):
@@ -169,7 +205,7 @@ class CourierSerializer(AbstractSerializer):
     def patch_response(self, courier_id):
         if self.invalid:
             return {"patch_error": {"couriers": [{"id": courier_id}]}}
-        courier_row = db.get_id("couriers", courier_id)[0]
+        courier_row = db.get_id("couriers", courier_id)
         response = {
             "courier_id": courier_row[0],
             "courier_type": courier_row[1],
@@ -192,6 +228,8 @@ class CourierSerializer(AbstractSerializer):
     @staticmethod
     def get_courier(courier_id):
         courier_row = db.get_id("couriers", courier_id)
+        if courier_row is None:
+            return None
         data = {
             "courier_id": courier_row[0],
             "courier_type": courier_row[1],
@@ -251,8 +289,21 @@ class OrderSerializer(AbstractSerializer):
 
     def get_orders(self):
         self.data = db.get_all(
-            "orders", ["id", "weight", "region", "delivery_hours"]
+            "orders", [
+                "id",
+                "weight",
+                "region",
+                "delivery_hours",
+                "assigned",
+                "completed"
+            ]
         )
+        for order in self.data:
+            order["delivery_hours"] = json.loads(order["delivery_hours"])
+        self.to_internal_value()
+
+    def get_free_orders(self):
+        self.data = db.get_free_orders()
         for order in self.data:
             order["delivery_hours"] = json.loads(order["delivery_hours"])
         self.to_internal_value()

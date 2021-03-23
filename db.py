@@ -141,6 +141,53 @@ def get_ids(table: str):
     return result
 
 
+def get_free_orders():
+    """
+    Fetches every row from the table 'orders' which was not assigned.
+    Returns:
+        A list of column:value dictionaries
+    """
+    columns = ["id", "weight", "region", "delivery_hours", "assigned", "completed"]
+    columns_joined = ", ".join(columns)
+    cursor.execute(f"SELECT {columns_joined} FROM orders "
+                   f"WHERE assigned = 0")
+    rows = cursor.fetchall()
+    result = []
+    for row in rows:
+        dict_row = {}
+        for index, column in enumerate(columns):
+            dict_row[column] = row[index]
+        result.append(dict_row)
+    return result
+
+
+def assign_orders(courier_id: int, orders: list, timestamp):
+    """
+    Assigns given list of orders to the given courier
+    Params:
+        courier_id: int - id of the courier
+        orders: list - a list of orders to assign
+        timestamp: string - formatted string of the timestamp
+    """
+    if not orders:
+        return
+    insert_values = []
+    order_ids = []
+    for order in orders:
+        insert_values.append("({}, {}, \'{}\')".format(
+            order.id, courier_id, timestamp
+        ))
+        order_ids.append(str(order.id))
+    print(insert_values)
+    print(order_ids)
+    order_ids_joined = '(' + ",".join(order_ids) + ')'
+    insert_sql = "INSERT INTO orders_assigned " \
+                 "(order_id, courier_id, assign_time) " \
+                 "VALUES " + ", ".join(insert_values)
+    update_sql = "UPDATE orders SET assigned = 1 " \
+                 "WHERE [id] in {}".format(order_ids_joined)
+    print(insert_sql + "; " + update_sql + ';')
+    cursor.executescript(insert_sql + "; " + update_sql)
 
 
 def delete(table: str, row_id: int):
@@ -150,3 +197,4 @@ def delete(table: str, row_id: int):
 
 
 check_db_exists()
+get_free_orders()
