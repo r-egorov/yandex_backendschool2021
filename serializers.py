@@ -63,12 +63,17 @@ class OrderAssigner:
         db.assign_orders(self.courier.id, self.to_assign, timestamp)
 
     def response(self):
-        timestamp = self.timestamp.isoformat()[:-4] + "Z"
-        print(timestamp)
-        response = {
-            "orders": [{"id": order.id} for order in self.to_assign],
-            "assign_time": timestamp
-        }
+        orders_response = [{"id": order.id} for order in self.to_assign]
+        if orders_response:
+            timestamp = self.timestamp.isoformat()[:-4] + "Z"
+            response = {
+                "orders": orders_response,
+                "assign_time": timestamp
+            }
+        else:
+            response = {
+                "orders": orders_response
+            }
         return response
 
 

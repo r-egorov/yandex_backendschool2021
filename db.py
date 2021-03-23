@@ -178,15 +178,12 @@ def assign_orders(courier_id: int, orders: list, timestamp):
             order.id, courier_id, timestamp
         ))
         order_ids.append(str(order.id))
-    print(insert_values)
-    print(order_ids)
     order_ids_joined = '(' + ",".join(order_ids) + ')'
     insert_sql = "INSERT INTO orders_assigned " \
                  "(order_id, courier_id, assign_time) " \
                  "VALUES " + ", ".join(insert_values)
     update_sql = "UPDATE orders SET assigned = 1 " \
                  "WHERE [id] in {}".format(order_ids_joined)
-    print(insert_sql + "; " + update_sql + ';')
     cursor.executescript(insert_sql + "; " + update_sql)
 
 
