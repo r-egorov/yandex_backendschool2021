@@ -161,6 +161,28 @@ def get_free_orders():
     return result
 
 
+def get_assigned_orders(courier_id):
+    """
+    Fetches every row from the table 'orders' which is associated
+    with the given courier in the table 'orders_assigned'.
+    Returns:
+        A list of column:value dictionaries
+    """
+    columns = ["id", "weight", "region", "delivery_hours", "assigned", "completed"]
+    columns_joined = ", ".join(columns)
+    cursor.execute(f"SELECT {columns_joined} FROM orders o "
+                   f"JOIN orders_assigned oa ON o.id = oa.order_id "
+                   f"WHERE oa.courier_id = {courier_id}")
+    rows = cursor.fetchall()
+    result = []
+    for row in rows:
+        dict_row = {}
+        for index, column in enumerate(columns):
+            dict_row[column] = row[index]
+        result.append(dict_row)
+    return result
+
+
 def assign_orders(courier_id: int, orders: list, timestamp):
     """
     Assigns given list of orders to the given courier
@@ -184,7 +206,24 @@ def assign_orders(courier_id: int, orders: list, timestamp):
                  "VALUES " + ", ".join(insert_values)
     update_sql = "UPDATE orders SET assigned = 1 " \
                  "WHERE [id] in {}".format(order_ids_joined)
-    cursor.executescript(insert_sql + "; " + update_sql)
+    cursor.executescript(insert_sql + "; " + update_sql + ';')
+
+
+def dismiss_orders(orders: list):
+    """
+    Dismisses given list of orders from the orders_assigned table
+    Params:
+        orders: list - a list of orders to dismiss
+    """
+    if not orders:
+        return
+    order_ids = [str(order.id) for order in orders]
+    order_ids_joined = '(' + ",".join(order_ids) + ')'
+    delete_sql = "DELETE FROM orders_assigned " \
+                 "WHERE [order_id] in {}".format(order_ids_joined)
+    update_sql = "UPDATE orders SET assigned = 0 " \
+                 "WHERE [id] in {}".format(order_ids_joined)
+    cursor.executescript(delete_sql + "; " + update_sql + ';')
 
 
 def delete(table: str, row_id: int):
@@ -194,4 +233,3 @@ def delete(table: str, row_id: int):
 
 
 check_db_exists()
-get_free_orders()

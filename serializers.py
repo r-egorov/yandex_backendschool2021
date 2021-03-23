@@ -26,6 +26,10 @@ class Courier:
         else:
             return 50
 
+    def hours_to_periods(self):
+        working_hours = [TimePeriod(timestr) for timestr in self.working_hours]
+        self.working_hours = working_hours
+
 
 class Order:
     def __init__(self, data):
@@ -37,6 +41,15 @@ class Order:
         self.delivery_hours = data.get("delivery_hours")
         self.assigned = data.get("assigned")
         self.completed = data.get("completed")
+
+    def hours_to_periods(self):
+        delivery_hours = [TimePeriod(timestr) for timestr in self.delivery_hours]
+        self.delivery_hours = delivery_hours
+
+    def assignable(self, courier):
+        for delivery_period in self.delivery_hours:
+            if delivery_period in courier.working_hours:
+                return True
 
 
 class TimePeriod:
@@ -52,15 +65,19 @@ class TimePeriod:
         return self.start < other.end and self.end > other.start
 
 
-class OrderAssigner:
-    def __init__(self, courier, orders_to_assign):
+class OrderHandler:
+    def __init__(self, courier, orders_to_assign=None, orders_to_dismiss=None):
         self.courier = courier
         self.to_assign = orders_to_assign
+        self.to_dismiss = orders_to_dismiss
         self.timestamp = datetime.now()
 
     def assign_orders(self):
         timestamp = datetime.strftime(self.timestamp, "%Y-%m-%d %H:%M:%S")
         db.assign_orders(self.courier.id, self.to_assign, timestamp)
+
+    def dismiss_orders(self):
+        db.dismiss_orders(self.to_dismiss)
 
     def response(self):
         orders_response = [{"id": order.id} for order in self.to_assign]
@@ -78,7 +95,7 @@ class OrderAssigner:
 
 
 class AbstractSerializer(ABC):
-    def __init__(self, data, many=False):
+    def __init__(self, data=None, many=False):
         self.data = data
         self.many = many
         self.valid = []
@@ -129,7 +146,7 @@ class CourierSerializer(AbstractSerializer):
     A class used to serialize data received in JSON-format
     """
 
-    def make_courier(self, data):
+    def make_courier(self, data=None):
         courier_id = data.get("courier_id")
         courier_type = self.validate_type(data.get("courier_type"))
         regions = self.validate_regions(data.get("regions"))
@@ -201,7 +218,7 @@ class CourierSerializer(AbstractSerializer):
                 key = "type"
             else:
                 self.invalid.append(courier_id)
-                break
+                return
             if not self.data[key]:
                 self.invalid.append(courier_id)
                 return
@@ -245,7 +262,7 @@ class CourierSerializer(AbstractSerializer):
 
 
 class OrderSerializer(AbstractSerializer):
-    def __init__(self, data, many=False):
+    def __init__(self, data=None, many=False):
         super().__init__(data, many)
 
     @staticmethod
@@ -309,6 +326,12 @@ class OrderSerializer(AbstractSerializer):
 
     def get_free_orders(self):
         self.data = db.get_free_orders()
+        for order in self.data:
+            order["delivery_hours"] = json.loads(order["delivery_hours"])
+        self.to_internal_value()
+
+    def get_assigned_orders(self, courier_id):
+        self.data = db.get_assigned_orders(courier_id)
         for order in self.data:
             order["delivery_hours"] = json.loads(order["delivery_hours"])
         self.to_internal_value()

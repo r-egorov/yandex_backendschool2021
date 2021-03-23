@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from serializers import CourierSerializer,\
-    OrderSerializer, TimePeriod, OrderAssigner
+    OrderSerializer, TimePeriod, OrderHandler
 
 
 app = Flask(__name__)
@@ -23,14 +23,45 @@ def import_couriers():
     return jsonify(serializer.import_response()), 400
 
 
+def assignable(order, courier):
+    working_hours = [TimePeriod(timestr) for timestr in courier.working_hours]
+    courier.working_hours = working_hours
+    delivery_time_list = [
+        TimePeriod(timestr) for timestr in order.delivery_hours
+    ]
+    order.delivery_hours = delivery_time_list
+    for delivery_period in order.delivery_hours:
+        if delivery_period in courier.working_hours:
+            return True
+
+
 @app.route("/couriers/<int:courier_id>", methods=["PATCH"])
 def patch_courier(courier_id):
     content = request.get_json()
-    serializer = CourierSerializer(content)
-    serializer.patch_courier(courier_id)
-    response = serializer.patch_response(courier_id)
-    if serializer.invalid:
+    courier_serializer = CourierSerializer(content)
+    courier_serializer.patch_courier(courier_id)
+    response = courier_serializer.patch_response(courier_id)
+    if courier_serializer.invalid:
         return jsonify(response), 400
+
+    order_serializer = OrderSerializer(many=True)
+    order_serializer.get_assigned_orders(courier_id)
+
+    courier = courier_serializer.get_courier(courier_id)
+    courier.hours_to_periods()
+
+    invalid_orders = []
+    for order in order_serializer.valid:
+        order.hours_to_periods()
+        if order.weight > courier.lift_capacity or \
+                order.region not in courier.regions or \
+                not order.assignable(courier):
+            invalid_orders.append(order)
+
+    if invalid_orders:
+        dismisser = OrderHandler(courier, orders_to_dismiss=invalid_orders)
+        dismisser.dismiss_orders()
+
     return jsonify(response), 200
 
 
@@ -56,23 +87,17 @@ def assign_orders():
         response = {"error": "No courier with such id"}
         return jsonify(response), 400
 
-    working_hours = [TimePeriod(timestr) for timestr in courier.working_hours]
-    courier.working_hours = working_hours
+    courier.hours_to_periods()
 
     orders_to_assign = []
     for order in order_serializer.valid:
+        order.hours_to_periods()
         if order.weight <= courier.lift_capacity:
             if order.region in courier.regions:
-                delivery_time_list = [
-                    TimePeriod(timestr) for timestr in order.delivery_hours
-                ]
-                order.delivery_hours = delivery_time_list
-                for delivery_period in order.delivery_hours:
-                    if delivery_period in courier.working_hours:
-                        orders_to_assign.append(order)
-                        break
+                if order.assignable(courier):
+                    orders_to_assign.append(order)
 
-    assigner = OrderAssigner(courier, orders_to_assign)
+    assigner = OrderHandler(courier, orders_to_assign=orders_to_assign)
     assigner.assign_orders()
     response = assigner.response()
     return jsonify(response), 200
