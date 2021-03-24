@@ -23,18 +23,6 @@ def import_couriers():
     return jsonify(serializer.import_response()), 400
 
 
-def assignable(order, courier):
-    working_hours = [TimePeriod(timestr) for timestr in courier.working_hours]
-    courier.working_hours = working_hours
-    delivery_time_list = [
-        TimePeriod(timestr) for timestr in order.delivery_hours
-    ]
-    order.delivery_hours = delivery_time_list
-    for delivery_period in order.delivery_hours:
-        if delivery_period in courier.working_hours:
-            return True
-
-
 @app.route("/couriers/<int:courier_id>", methods=["PATCH"])
 def patch_courier(courier_id):
     content = request.get_json()
