@@ -115,7 +115,7 @@ def get_all(table: str, columns):
 
 def get_id(table: str, row_id: int):
     """
-    Fetches every row of the given columns from the given table.
+    Fetches a row of the given columns from the given table with the id.
     Parameters:
         table: str - the destination table name
         row_id: int - the columns that are needed to be fetched

@@ -66,7 +66,7 @@ class TimePeriod:
 
 
 class OrderHandler:
-    def __init__(self, courier, orders_to_assign=None, orders_to_dismiss=None):
+    def __init__(self, courier=None, orders_to_assign=None, orders_to_dismiss=None):
         self.courier = courier
         self.to_assign = orders_to_assign
         self.to_dismiss = orders_to_dismiss
@@ -78,6 +78,14 @@ class OrderHandler:
 
     def dismiss_orders(self):
         db.dismiss_orders(self.to_dismiss)
+
+    @staticmethod
+    def complete_order(order, complete_time):
+        db.update(
+            "orders",
+            order.id,
+            {"completed": 1, "complete_time": complete_time}
+        )
 
     def response(self):
         orders_response = [{"id": order.id} for order in self.to_assign]
@@ -309,7 +317,7 @@ class OrderSerializer(AbstractSerializer):
             orders_dict["orders"].append({"id": order.id})
         return orders_dict
 
-    def get_orders(self):
+    def get_all_orders(self):
         self.data = db.get_all(
             "orders", [
                 "id",
@@ -323,6 +331,21 @@ class OrderSerializer(AbstractSerializer):
         for order in self.data:
             order["delivery_hours"] = json.loads(order["delivery_hours"])
         self.to_internal_value()
+
+    @staticmethod
+    def get_order(order_id):
+        order_row = db.get_id("orders", order_id)
+        if order_row:
+            data = {
+                "id": order_row[0],
+                "weight": order_row[1],
+                "region": order_row[2],
+                "delivery_hours": json.loads(order_row[3]),
+                "assigned": order_row[4],
+                "completed": order_row[5]
+            }
+            return Order(data)
+        return None
 
     def get_free_orders(self):
         self.data = db.get_free_orders()

@@ -103,5 +103,32 @@ def assign_orders():
     return jsonify(response), 200
 
 
+@app.route("/orders/complete", methods=["POST"])
+def complete_order():
+    content = request.get_json()
+    courier_id = content.get("courier_id")
+    received_order_id = content.get("order_id")
+    complete_time = content.get("complete_time")
+    if not courier_id or not received_order_id or not complete_time:
+        return jsonify({"error": "Field missing"}), 400
+
+    order_serializer = OrderSerializer(many=True)
+    order_serializer.get_assigned_orders(courier_id)
+    order_to_complete = order_serializer.get_order(received_order_id)
+    if not order_to_complete:
+        return jsonify({"error": "Order not found"}), 400
+
+    order_handler = OrderHandler()
+
+    for order in order_serializer.valid:
+        if order.id == order_to_complete.id:
+            if not order.completed:
+                order_handler.complete_order(order, complete_time)
+                return jsonify({"order_id": order.id}), 200
+            else:
+                return jsonify({"error": "Order was completed earlier"}), 400
+    return jsonify({"error": "Order not assigned to the given courier"}), 400
+
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port="8000", debug=True)
