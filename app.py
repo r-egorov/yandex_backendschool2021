@@ -27,6 +27,10 @@ def import_couriers():
 def patch_courier(courier_id):
     content = request.get_json()
     courier_serializer = CourierSerializer(content)
+    courier = courier_serializer.get_courier(courier_id)
+    if not courier:
+        return jsonify({"error": "Courier not found"}), 404
+
     courier_serializer.patch_courier(courier_id)
     response = courier_serializer.patch_response(courier_id)
     if courier_serializer.invalid:
@@ -116,6 +120,16 @@ def complete_order():
             else:
                 return jsonify({"error": "Order was completed earlier"}), 400
     return jsonify({"error": "Order not assigned to the given courier"}), 400
+
+
+@app.route("/couriers/<int:courier_id>", methods=["GET"])
+def get_courier_info(courier_id):
+    courier_serializer = CourierSerializer
+    courier = courier_serializer.get_courier(courier_id)
+    if not courier:
+        return jsonify({"error": "Courier not found"}), 404
+    courier_serializer.get_courier_info(courier)
+    return "GOOD", 200
 
 
 if __name__ == "__main__":

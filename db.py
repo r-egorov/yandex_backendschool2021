@@ -161,7 +161,7 @@ def get_free_orders():
     return result
 
 
-def get_assigned_orders(courier_id):
+def get_assigned_orders(courier_id, completed=False):
     """
     Fetches every row from the table 'orders' which is associated
     with the given courier in the table 'orders_assigned'.
@@ -169,10 +169,16 @@ def get_assigned_orders(courier_id):
         A list of column:value dictionaries
     """
     columns = ["id", "weight", "region", "delivery_hours", "assigned", "completed"]
+    completed_flag = 0
+    if completed:
+        columns.append("assign_time")
+        columns.append("complete_time")
+        completed_flag = 1
     columns_joined = ", ".join(columns)
     cursor.execute(f"SELECT {columns_joined} FROM orders o "
                    f"JOIN orders_assigned oa ON o.id = oa.order_id "
-                   f"WHERE oa.courier_id = {courier_id}")
+                   f"WHERE oa.courier_id = {courier_id} AND "
+                   f"o.completed = {completed_flag}")
     rows = cursor.fetchall()
     result = []
     for row in rows:

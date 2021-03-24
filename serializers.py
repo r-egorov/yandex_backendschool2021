@@ -41,6 +41,8 @@ class Order:
         self.delivery_hours = data.get("delivery_hours")
         self.assigned = data.get("assigned")
         self.completed = data.get("completed")
+        self.complete_time = data.get("complete_time")
+        self.assign_time = data.get("assign_time")
 
     def hours_to_periods(self):
         delivery_hours = [TimePeriod(timestr) for timestr in self.delivery_hours]
@@ -50,6 +52,9 @@ class Order:
         for delivery_period in self.delivery_hours:
             if delivery_period in courier.working_hours:
                 return True
+
+    def __lt__(self, other):
+        return self.complete_time < other.complete_time
 
 
 class TimePeriod:
@@ -73,7 +78,7 @@ class OrderHandler:
         self.timestamp = datetime.now()
 
     def assign_orders(self):
-        timestamp = datetime.strftime(self.timestamp, "%Y-%m-%d %H:%M:%S")
+        timestamp = self.timestamp.isoformat()[:-4] + "Z"
         db.assign_orders(self.courier.id, self.to_assign, timestamp)
 
     def dismiss_orders(self):
@@ -268,6 +273,57 @@ class CourierSerializer(AbstractSerializer):
         }
         return Courier(data)
 
+    @staticmethod
+    def get_courier_info(courier):
+        order_serializer = OrderSerializer(many=True)
+        order_serializer.get_completed_orders(courier.id)
+        if not order_serializer.valid:
+            return None
+        region_order = {}
+        for order in order_serializer.valid:
+            order.complete_time = datetime.fromisoformat(
+                order.complete_time[:-1] + "0000"
+            )
+            order.assign_time = datetime.fromisoformat(
+                order.assign_time[:-1] + "0000"
+            )
+            if not region_order.get(order.region):
+                region_order[order.region] = [order]
+            else:
+                region_order[order.region].append(order)
+
+        average_delivery_times = []
+        for key in region_order.keys():
+            region_order[key].sort()
+            i = 0
+            average = 0
+            while i < len(region_order[key]):
+                order = region_order[key][i]
+                if i == 0:
+                    delivery_time = order.complete_time - order.assign_time
+                else:
+                    prev_order = region_order[key][i - 1]
+                    delivery_time = order.complete_time - prev_order.complete_time
+                average += delivery_time.total_seconds()
+                i += 1
+            average /= i
+            average_delivery_times.append(average)
+
+        min_time = min(average_delivery_times)
+        courier.rating = (60 * 60 - min(min_time, 60*60)) / (60*60) * 5
+
+        if courier.type == "foot":
+            coefficient = 2
+        elif courier.type == "bike":
+            coefficient = 5
+        else:
+            coefficient = 9
+
+        courier.earning = len(order_serializer.valid) * (500 * coefficient)
+        print(courier.rating, courier.earning)
+
+
+
 
 class OrderSerializer(AbstractSerializer):
     def __init__(self, data=None, many=False):
@@ -355,6 +411,12 @@ class OrderSerializer(AbstractSerializer):
 
     def get_assigned_orders(self, courier_id):
         self.data = db.get_assigned_orders(courier_id)
+        for order in self.data:
+            order["delivery_hours"] = json.loads(order["delivery_hours"])
+        self.to_internal_value()
+
+    def get_completed_orders(self, courier_id):
+        self.data = db.get_assigned_orders(courier_id, completed=True)
         for order in self.data:
             order["delivery_hours"] = json.loads(order["delivery_hours"])
         self.to_internal_value()
