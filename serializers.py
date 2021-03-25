@@ -276,9 +276,9 @@ class CourierSerializer(AbstractSerializer):
     @staticmethod
     def get_courier_info(courier):
         order_serializer = OrderSerializer(many=True)
-        order_serializer.get_completed_orders(courier.id)
+        order_serializer.get_complete_orders(courier.id)
         if not order_serializer.valid:
-            return None
+            return
         region_order = {}
         for order in order_serializer.valid:
             order.complete_time = datetime.fromisoformat(
@@ -319,10 +319,24 @@ class CourierSerializer(AbstractSerializer):
         else:
             coefficient = 9
 
-        courier.earning = len(order_serializer.valid) * (500 * coefficient)
-        print(courier.rating, courier.earning)
+        whole_deliveries = set()
+        for order in order_serializer.valid:
+            whole_deliveries.add(order.assign_time)
 
+        courier.earning = len(whole_deliveries) * (500 * coefficient)
 
+    @staticmethod
+    def courier_info_response(courier):
+        response = {
+            "courier_id": courier.id,
+            "courier_type": courier.type,
+            "regions": courier.regions,
+            "working_hours": courier.working_hours,
+            "earnings": courier.earning
+        }
+        if courier.rating:
+            response["rating"] = float("%.2f" % courier.rating)
+        return response
 
 
 class OrderSerializer(AbstractSerializer):
@@ -415,8 +429,14 @@ class OrderSerializer(AbstractSerializer):
             order["delivery_hours"] = json.loads(order["delivery_hours"])
         self.to_internal_value()
 
-    def get_completed_orders(self, courier_id):
-        self.data = db.get_assigned_orders(courier_id, completed=True)
+    def get_complete_orders(self, courier_id):
+        self.data = db.get_assigned_orders(courier_id, complete=True)
+        for order in self.data:
+            order["delivery_hours"] = json.loads(order["delivery_hours"])
+        self.to_internal_value()
+
+    def get_incomplete_orders(self, courier_id):
+        self.data = db.get_assigned_orders(courier_id, incomplete=True)
         for order in self.data:
             order["delivery_hours"] = json.loads(order["delivery_hours"])
         self.to_internal_value()

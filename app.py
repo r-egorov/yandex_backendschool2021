@@ -37,7 +37,7 @@ def patch_courier(courier_id):
         return jsonify(response), 400
 
     order_serializer = OrderSerializer(many=True)
-    order_serializer.get_assigned_orders(courier_id)
+    order_serializer.get_incomplete_orders(courier_id)
 
     courier = courier_serializer.get_courier(courier_id)
     courier.hours_to_periods()
@@ -129,8 +129,9 @@ def get_courier_info(courier_id):
     if not courier:
         return jsonify({"error": "Courier not found"}), 404
     courier_serializer.get_courier_info(courier)
-    return "GOOD", 200
+    response = courier_serializer.courier_info_response(courier)
+    return jsonify(response), 200
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port="8000", debug=True)
+    app.run(host="0.0.0.0", port="8000", debug=True)
