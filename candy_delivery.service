@@ -1,0 +1,10 @@
+[Unit]
+Description=uWSGI instance to serve myproject
+After=network.target
+
+[Service]
+User=entrant
+Group=www-data
+WorkingDirectory=/home/entrant/candy_delivery
+Environment="PATH=/home/entrant/candy_delivery/venv/bin"
+ExecStart=/home/entrant/candy_delivery/venv/bin/uwsgi --ini uwsgi.ini
