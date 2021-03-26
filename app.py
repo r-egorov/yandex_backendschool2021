@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from serializers import CourierSerializer,\
-    OrderSerializer, TimePeriod, OrderHandler
+    OrderSerializer, OrderHandler
 
 
 app = Flask(__name__)
