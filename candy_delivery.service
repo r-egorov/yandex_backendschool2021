@@ -1,5 +1,5 @@
 [Unit]
-Description=uWSGI instance to serve myproject
+Description=uWSGI instance to serve candy_delivery app
 After=network.target
 
 [Service]
@@ -7,4 +7,7 @@ User=entrant
 Group=www-data
 WorkingDirectory=/home/entrant/candy_delivery
 Environment="PATH=/home/entrant/candy_delivery/venv/bin"
-ExecStart=/home/entrant/candy_delivery/venv/bin/uwsgi --ini uwsgi.ini
+ExecStart=/home/entrant/candy_delivery/venv/bin/uwsgi --ini /home/entrant/candy_delivery/app/wsgi.ini
+
+[Install]
+WantedBy=multi-user.target
