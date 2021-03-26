@@ -6,11 +6,6 @@ from serializers import CourierSerializer,\
 app = Flask(__name__)
 
 
-@app.route('/')
-def index():
-    return "Hello World!"
-
-
 @app.route("/couriers", methods=["POST"])
 def import_couriers():
     content = request.get_json()
